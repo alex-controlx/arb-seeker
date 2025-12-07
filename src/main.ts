@@ -5,7 +5,6 @@ import { ArbEngine } from './arbEngine.ts';
 import { BetfairAuth } from './betfairAuth.ts';
 import { BetfairService } from './betfairService.ts';
 import { fetchOdds, parseOddsResponse } from './oddsService.ts';
-import { detectArbs } from './arbDetector.ts';
 import { calculateGreyManStake, calculateLiability } from './utils.ts';
 import { sendTelegramAlert } from './notifications.ts';
 import { generateMockArb } from './mockData.ts';
@@ -25,7 +24,7 @@ const betfairAuth = new BetfairAuth(
   config.betfairUsername,
   config.betfairPassword,
 );
-const betfairService = new BetfairService(betfairAuth, config.betfairAppKey);
+const _betfairService = new BetfairService(betfairAuth, config.betfairAppKey);
 
 /**
  * Process a single arbitrage opportunity
@@ -47,26 +46,29 @@ async function processArbOpportunity(arb: ArbOpportunity): Promise<void> {
 
   // Calculate Betfair liability (amount needed to cover if lay bet wins)
   // Liability = stake * (layOdds - 1)
-  const liabilityNeeded = calculateLiability(arb.suggestedStake, arb.layOdds);
+  const _liabilityNeeded = calculateLiability(arb.suggestedStake, arb.layOdds);
 
-  // Attempt auto-lay on Betfair
-  let autoLayStatus: string;
-  if (config.mockMode) {
-    autoLayStatus = '✅ Auto-Laid (Mock)';
-  } else {
-    const layResult = await betfairService.placeLayBet(
-      arb.betfairMarketId,
-      arb.betfairSelectionId,
-      liabilityNeeded,
-      arb.layOdds,
-    );
+  // --- MANUAL MODE: Auto-lay disabled ---
+  // Auto-lay will be enabled when the approach is fully tested
+  const autoLayStatus = '⚠️ Manual Lay Required';
 
-    if (layResult.status === 'SUCCESS') {
-      autoLayStatus = '✅ Auto-Laid';
-    } else {
-      autoLayStatus = `⚠️ FAILED - Manual Lay Req (${layResult.error || 'Unknown error'})`;
-    }
-  }
+  // --- DANGEROUS AUTOMATION (DISABLED FOR NOW) ---
+  // if (config.mockMode) {
+  //   autoLayStatus = '✅ Auto-Laid (Mock)';
+  // } else {
+  //   const layResult = await _betfairService.placeLayBet(
+  //     arb.betfairMarketId,
+  //     arb.betfairSelectionId,
+  //     _liabilityNeeded,
+  //     arb.layOdds,
+  //   );
+  //
+  //   if (layResult.status === 'SUCCESS') {
+  //     autoLayStatus = '✅ Auto-Laid';
+  //   } else {
+  //     autoLayStatus = `⚠️ FAILED - Manual Lay Req (${layResult.error || 'Unknown error'})`;
+  //   }
+  // }
 
   // Send Telegram notification
   const sent = await sendTelegramAlert(

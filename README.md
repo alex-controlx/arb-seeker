@@ -6,7 +6,7 @@ A low-latency Sports Arbitrage Bot that detects price discrepancies between Aust
 
 Arb-Seeker uses a **Hybrid Automation** strategy:
 - **Bookies:** "Click-to-Bet" alerts via Telegram (to avoid bans)
-- **Betfair:** Fully automated "Auto-Lay" execution (to lock profit instantly)
+- **Betfair:** Manual Mode - calculates arbs and alerts, waits for manual lay placement (Auto-Lay will be enabled when fully tested)
 
 ## System Architecture
 
@@ -25,8 +25,8 @@ Arb-Seeker uses a **Hybrid Automation** strategy:
 - **Automated Deduplication:** Prevents processing the same arb twice (2-hour expiry)
 - **Profit Margin Validation:** Only processes arbs with ≥2% profit margin
 - **Liquidity Checking:** Ensures sufficient Betfair liquidity before processing
-- **Automated Lay Betting:** Automatically places counter-bets on Betfair
-- **Telegram Alerts:** Instant notifications with deep links to bookie apps
+- **Manual Mode:** Calculates arbitrage opportunities and alerts via Telegram (manual lay placement required)
+- **Telegram Alerts:** Instant notifications with deep links to bookie apps and Betfair markets
 
 ## Installation
 
@@ -150,8 +150,8 @@ An arbitrage opportunity must pass all of these checks:
    - Calculate Grey Man stake
    - Validate via ArbEngine
    - Calculate Betfair liability
-   - Attempt auto-lay on Betfair
-   - Send Telegram notification with status
+   - Send Telegram notification with "Manual Lay Required" status
+   - Wait for manual lay placement via Betfair button
 
 ## Betfair Integration
 
@@ -161,23 +161,31 @@ An arbitrage opportunity must pass all of these checks:
 - Session tokens stored in Deno KV with 24-hour expiry
 - Auto-refreshes on `INVALID_SESSION` errors
 
-### Lay Betting
+### Lay Betting (Manual Mode)
 
-- Automatically calculates lay stake from liability
-- Checks account balance before placing bets
-- Uses `LIMIT_ORDER` with `PERSISTENCE_TYPE: LAPSE`
-- Returns success/failure status for Telegram alerts
+- **Current Status:** Manual Mode - Auto-lay is disabled
+- Bot calculates lay stake and liability for each arb
+- Telegram notifications include "⚠️ Manual Lay Required" status
+- User manually places lay bets via Betfair button in Telegram
+- Auto-lay functionality will be enabled when the approach is fully tested
+
+**Note:** The `BetfairService.placeLayBet()` method exists but is currently commented out in `main.ts` to prevent automatic execution.
 
 ## Telegram Notifications
 
 Notifications include:
 - **Header:** Profit percentage (bold)
 - **Strategy:** Stake amount, bookie, and odds
-- **Betfair Status:** Auto-lay success or failure
+- **Betfair Status:** "⚠️ Manual Lay Required" (indicates manual intervention needed)
 - **Event Details:** Sport, teams, start time
 - **Buttons:**
-  - **OPEN [BOOKIE] APP:** Deep link to bookie app
-  - **OPEN BETFAIR:** Universal link to Betfair market
+  - **OPEN [BOOKIE] APP:** Deep link to bookie app (place back bet manually)
+  - **OPEN BETFAIR:** Universal link to Betfair market (place lay bet manually)
+
+**Workflow:** When you receive a notification:
+1. Click the bookie button to place your back bet (e.g., $30, $50, or any amount you choose)
+2. Click the Betfair button to open the market
+3. Manually enter the lay stake (calculated as roughly 10% of the bot's suggested stake) and place the bet
 
 ## Project Structure
 
@@ -214,7 +222,7 @@ The following sport keys are configured for The-Odds-API:
 
 - **404 Errors:** Invalid sport keys are logged and skipped (no crash)
 - **API Failures:** Individual arb failures don't stop the scanning process
-- **Betfair Errors:** Failed lay bets trigger manual lay alerts in Telegram
+- **Betfair Integration:** Manual mode ensures no automatic bets are placed
 - **Minimal Logging:** Only I/O operations are logged (as per preferences)
 
 ## Testing
@@ -231,9 +239,10 @@ Set `MOCK_MODE=true` to test without real API calls:
 When testing, verify:
 - ✅ Telegram receives a message
 - ✅ Message shows bold stake amount (e.g., "Bet **$315**")
-- ✅ Betfair status shows correctly
+- ✅ Betfair status shows "⚠️ Manual Lay Required"
 - ✅ Buttons are clickable and open correct apps/links
 - ✅ Deduplication prevents duplicate processing
+- ✅ No automatic bets are placed (manual mode confirmed)
 
 ## Requirements
 
