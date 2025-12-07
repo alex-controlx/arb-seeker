@@ -1,0 +1,14 @@
+# OS generated files
+.DS_Store
+
+# Environment variables
+.env
+
+# Logs
+logs/
+
+# Deno cache
+.deno/
+
+# Node modules
+node_modules/
