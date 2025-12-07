@@ -4,8 +4,8 @@ import { loadConfig, SPORT_KEYS, SPORT_TIERS, isSydneyDaytime } from './config.t
 import { ArbEngine } from './arbEngine.ts';
 import { BetfairAuth } from './betfairAuth.ts';
 import { BetfairService } from './betfairService.ts';
-// API polling disabled to save costs
-// import { fetchOdds, parseOddsResponse } from './oddsService.ts';
+import { fetchOdds, parseOddsResponse } from './oddsService.ts';
+import { detectArbs as _detectArbs } from './arbDetector.ts';
 import { calculateGreyManStake, calculateLiability } from './utils.ts';
 import { sendTelegramAlert } from './notifications.ts';
 import { generateMockArb } from './mockData.ts';
@@ -118,7 +118,7 @@ async function processArbOpportunity(arb: ArbOpportunity): Promise<void> {
 
 /**
  * Scan sports for arbitrage opportunities
- * NOTE: The-Odds-API polling is disabled to save costs - using mock data only
+ * Polls The-Odds-API during daytime and processes opportunities (manual mode - no auto bets)
  */
 async function scanSports(sportKeys: string[]): Promise<void> {
   // Skip if outside Sydney daytime (7am-11pm)
@@ -128,18 +128,31 @@ async function scanSports(sportKeys: string[]): Promise<void> {
 
   for (const sportKey of sportKeys) {
     try {
-      // --- API POLLING DISABLED TO SAVE MONEY ---
-      // const events = await fetchOdds(config.oddsApiKey, { sportKey });
-      // const parsedOdds = parseOddsResponse(events);
-
-      // Use mock data only (manual confirmation mode)
       if (config.mockMode) {
+        // Use mock data for testing
         const mockArb = generateMockArb();
         await processArbOpportunity(mockArb);
       } else {
-        // In production with manual mode, you would manually trigger arbs
-        // or use a different data source that doesn't require API polling
-        console.log(`Skipping ${sportKey} - API polling disabled (manual mode)`);
+        // Poll The-Odds-API for real odds data
+        const events = await fetchOdds(config.oddsApiKey, { sportKey });
+
+        if (events.length === 0) {
+          continue;
+        }
+
+        // Parse odds response
+        const parsedOdds = parseOddsResponse(events);
+
+        // TODO: In production, you would also fetch Betfair markets here
+        // For now, we'll use detectArbs() when Betfair integration is complete
+        // This is a placeholder - actual arb detection requires Betfair market data
+        console.log(`Found ${parsedOdds.length} events for ${sportKey} (Betfair integration needed for full detection)`);
+        
+        // When Betfair markets are fetched, use detectArbs() to find opportunities:
+        // const arbs = detectArbs(parsedOdds, betfairMarkets);
+        // for (const arb of arbs) {
+        //   await processArbOpportunity(arb);
+        // }
       }
     } catch (error) {
       console.error(`Error scanning ${sportKey}:`, error);

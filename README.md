@@ -15,13 +15,13 @@ Arb-Seeker uses a **Hybrid Automation** strategy:
 - **Notifications:** Telegram Bot API with Inline Keyboards
 - **Operating Hours:** Sydney daytime only (7am-11pm AEST/AEDT)
 - **External APIs:**
-  - **Odds Provider:** The-Odds-API (currently disabled to save costs - using mock data)
+  - **Odds Provider:** The-Odds-API (polls during daytime hours only)
   - **Betfair Exchange:** API-NG (JSON-RPC) for execution (manual mode - no automatic bets)
 
 ## Features
 
 - **Daytime-Only Operation:** Bot only runs during Sydney daytime (7am-11pm) to align with manual confirmation workflow
-- **Smart Polling:** Tiered intervals to optimize API usage and costs (API polling currently disabled to save costs)
+- **Smart Polling:** Tiered intervals to optimize API usage and costs (polls The-Odds-API during daytime only)
 - **Active Hours Filtering:** Skips sports outside their active time windows
 - **Grey Man Strategy:** Random stake amounts that avoid round numbers (bot detection)
 - **Automated Deduplication:** Prevents processing the same arb twice (2-hour expiry)
@@ -101,9 +101,7 @@ This ensures the bot is only active when you're available to manually confirm an
 
 ## Smart Polling Strategy
 
-**Note:** API polling is currently **disabled** to save costs. The bot uses mock data in manual mode.
-
-When API polling is enabled, Arb-Seeker uses tiered polling intervals:
+Arb-Seeker polls The-Odds-API during Sydney daytime hours (7am-11pm) using tiered polling intervals:
 
 ### Tier 1 Sports (High Volatility)
 - **Sports:** NBA, AFL, NRL
@@ -158,17 +156,18 @@ An arbitrage opportunity must pass all of these checks:
 
 ### Processing Flow
 
-**Note:** API polling is currently disabled. The bot uses mock data in manual mode.
-
 1. Check if within Sydney daytime (7am-11pm) - skip if outside hours
-2. ~~Fetch odds from The-Odds-API for active sports~~ (disabled to save costs)
-3. Use mock data or manual triggers for arbitrage opportunities
-4. For each valid arb:
+2. Fetch odds from The-Odds-API for active sports (during daytime only)
+3. Parse and match with Betfair markets (when Betfair integration is complete)
+4. Detect arbitrage opportunities using `detectArbs()`
+5. For each valid arb:
    - Calculate Grey Man stake
    - Validate via ArbEngine
    - Calculate Betfair liability
    - Send Telegram notification with "Manual Lay Required" status
    - Wait for manual lay placement via Betfair button
+
+**Note:** In mock mode (`MOCK_MODE=true`), the bot uses mock data instead of polling The-Odds-API.
 
 ## Betfair Integration
 
