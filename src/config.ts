@@ -78,6 +78,19 @@ export function loadConfig(): Config {
   };
 }
 
+/**
+ * Check if current time is within Sydney daytime (7am-11pm AEST/AEDT)
+ * Accounts for daylight saving time automatically
+ */
+export function isSydneyDaytime(): boolean {
+  const now = new Date();
+  // Get Sydney time (handles AEST/AEDT automatically)
+  const sydneyTime = new Date(now.toLocaleString('en-US', { timeZone: 'Australia/Sydney' }));
+  const currentHour = sydneyTime.getHours();
+  // 7am (7) to 11pm (23)
+  return currentHour >= 7 && currentHour < 23;
+}
+
 export function isActiveHours(sportKey: string): boolean {
   const hours = ACTIVE_HOURS[sportKey];
   if (!hours) return true; // Default to active if no hours defined

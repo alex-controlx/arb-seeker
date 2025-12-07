@@ -13,13 +13,15 @@ Arb-Seeker uses a **Hybrid Automation** strategy:
 - **Runtime:** Deno (TypeScript)
 - **State:** Deno KV (Deduplication & Session Management)
 - **Notifications:** Telegram Bot API with Inline Keyboards
+- **Operating Hours:** Sydney daytime only (7am-11pm AEST/AEDT)
 - **External APIs:**
-  - **Odds Provider:** The-Odds-API (100k requests/month plan recommended)
-  - **Betfair Exchange:** API-NG (JSON-RPC) for execution
+  - **Odds Provider:** The-Odds-API (currently disabled to save costs - using mock data)
+  - **Betfair Exchange:** API-NG (JSON-RPC) for execution (manual mode - no automatic bets)
 
 ## Features
 
-- **Smart Polling:** Tiered intervals to optimize API usage and costs
+- **Daytime-Only Operation:** Bot only runs during Sydney daytime (7am-11pm) to align with manual confirmation workflow
+- **Smart Polling:** Tiered intervals to optimize API usage and costs (API polling currently disabled to save costs)
 - **Active Hours Filtering:** Skips sports outside their active time windows
 - **Grey Man Strategy:** Random stake amounts that avoid round numbers (bot detection)
 - **Automated Deduplication:** Prevents processing the same arb twice (2-hour expiry)
@@ -86,26 +88,39 @@ deno task dev
 MOCK_MODE=true deno task start
 ```
 
+## Daytime-Only Operation
+
+The bot operates only during **Sydney daytime hours (7am-11pm AEST/AEDT)** to align with manual confirmation workflow:
+
+- **Active Hours:** 7:00 AM - 11:00 PM Sydney time
+- **Automatic Shutdown:** Bot stops at 11pm and logs "Reached end of daytime - bot stopped"
+- **Automatic Resume:** Bot resumes at 7am and logs "Good morning - resuming bot"
+- **Timezone Handling:** Automatically accounts for AEST/AEDT daylight saving transitions
+
+This ensures the bot is only active when you're available to manually confirm and place bets.
+
 ## Smart Polling Strategy
 
-To optimize API usage and stay within the 100k requests/month limit, Arb-Seeker uses tiered polling intervals:
+**Note:** API polling is currently **disabled** to save costs. The bot uses mock data in manual mode.
+
+When API polling is enabled, Arb-Seeker uses tiered polling intervals:
 
 ### Tier 1 Sports (High Volatility)
 - **Sports:** NBA, AFL, NRL
-- **Interval:** Every 2 minutes
-- **Daily Requests:** ~2,160 requests/day (3 sports × 30 scans/hour × 24 hours)
+- **Interval:** Every 2 minutes (during daytime only)
+- **Daily Requests:** ~1,440 requests/day (3 sports × 30 scans/hour × 16 hours daytime)
 
 ### Tier 2 Sports (Lower Volatility)
 - **Sports:** Cricket, Rugby Union
-- **Interval:** Every 10 minutes
-- **Daily Requests:** ~432 requests/day (2 sports × 6 scans/hour × 24 hours)
+- **Interval:** Every 10 minutes (during daytime only)
+- **Daily Requests:** ~192 requests/day (2 sports × 6 scans/hour × 16 hours daytime)
 
 ### Tier 3 Sports (Static)
 - **Sports:** Futures/Outrights
-- **Interval:** Every 6 hours
+- **Interval:** Every 6 hours (during daytime only)
 - **Daily Requests:** Minimal
 
-**Total Monthly Usage:** ~78,000 requests/month (leaving ~22,000 buffer for debugging)
+**Total Monthly Usage (Daytime Only):** ~49,000 requests/month (leaving ~51,000 buffer)
 
 ### Active Hours Filtering
 
@@ -143,9 +158,11 @@ An arbitrage opportunity must pass all of these checks:
 
 ### Processing Flow
 
-1. Fetch odds from The-Odds-API for active sports
-2. Parse and match with Betfair markets
-3. Detect arbitrage opportunities
+**Note:** API polling is currently disabled. The bot uses mock data in manual mode.
+
+1. Check if within Sydney daytime (7am-11pm) - skip if outside hours
+2. ~~Fetch odds from The-Odds-API for active sports~~ (disabled to save costs)
+3. Use mock data or manual triggers for arbitrage opportunities
 4. For each valid arb:
    - Calculate Grey Man stake
    - Validate via ArbEngine
@@ -220,6 +237,7 @@ The following sport keys are configured for The-Odds-API:
 
 ## Error Handling
 
+- **Daytime Transitions:** Bot automatically logs when stopping (11pm) and resuming (7am)
 - **404 Errors:** Invalid sport keys are logged and skipped (no crash)
 - **API Failures:** Individual arb failures don't stop the scanning process
 - **Betfair Integration:** Manual mode ensures no automatic bets are placed

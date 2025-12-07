@@ -1,10 +1,11 @@
 // Main orchestration - Tiered polling and arbitrage processing
 
-import { loadConfig, SPORT_KEYS, SPORT_TIERS } from './config.ts';
+import { loadConfig, SPORT_KEYS, SPORT_TIERS, isSydneyDaytime } from './config.ts';
 import { ArbEngine } from './arbEngine.ts';
 import { BetfairAuth } from './betfairAuth.ts';
 import { BetfairService } from './betfairService.ts';
-import { fetchOdds, parseOddsResponse } from './oddsService.ts';
+// API polling disabled to save costs
+// import { fetchOdds, parseOddsResponse } from './oddsService.ts';
 import { calculateGreyManStake, calculateLiability } from './utils.ts';
 import { sendTelegramAlert } from './notifications.ts';
 import { generateMockArb } from './mockData.ts';
@@ -25,6 +26,37 @@ const betfairAuth = new BetfairAuth(
   config.betfairPassword,
 );
 const _betfairService = new BetfairService(betfairAuth, config.betfairAppKey);
+
+/**
+ * Check for daytime transitions and log accordingly
+ */
+async function checkDaytimeTransition(): Promise<void> {
+  const currentDaytime = isSydneyDaytime();
+  const lastStateKey = ['daytime_state'];
+  
+  const lastStateEntry = await kv.get<boolean>(lastStateKey);
+  const lastDaytime = lastStateEntry.value ?? null;
+  
+  // Detect transitions
+  if (lastDaytime === null) {
+    // First run - initialize state
+    await kv.set(lastStateKey, currentDaytime);
+    if (currentDaytime) {
+      console.log('Good morning - resuming bot');
+    }
+  } else if (lastDaytime && !currentDaytime) {
+    // Transition from daytime to nighttime (11pm)
+    console.log('Reached end of daytime - bot stopped');
+    await kv.set(lastStateKey, currentDaytime);
+  } else if (!lastDaytime && currentDaytime) {
+    // Transition from nighttime to daytime (7am)
+    console.log('Good morning - resuming bot');
+    await kv.set(lastStateKey, currentDaytime);
+  } else {
+    // No transition - update state silently
+    await kv.set(lastStateKey, currentDaytime);
+  }
+}
 
 /**
  * Process a single arbitrage opportunity
@@ -86,32 +118,28 @@ async function processArbOpportunity(arb: ArbOpportunity): Promise<void> {
 
 /**
  * Scan sports for arbitrage opportunities
+ * NOTE: The-Odds-API polling is disabled to save costs - using mock data only
  */
 async function scanSports(sportKeys: string[]): Promise<void> {
+  // Skip if outside Sydney daytime (7am-11pm)
+  if (!isSydneyDaytime()) {
+    return;
+  }
+
   for (const sportKey of sportKeys) {
     try {
-      // Fetch odds from The-Odds-API
-      const events = await fetchOdds(config.oddsApiKey, { sportKey });
+      // --- API POLLING DISABLED TO SAVE MONEY ---
+      // const events = await fetchOdds(config.oddsApiKey, { sportKey });
+      // const parsedOdds = parseOddsResponse(events);
 
-      if (events.length === 0) {
-        continue;
-      }
-
-      // Parse odds response
-      const parsedOdds = parseOddsResponse(events);
-
-      // TODO: In production, you would also fetch Betfair markets here
-      // For now, we'll use mock data or skip if not in mock mode
+      // Use mock data only (manual confirmation mode)
       if (config.mockMode) {
-        // Use mock data for testing
         const mockArb = generateMockArb();
         await processArbOpportunity(mockArb);
       } else {
-        // In production, you would:
-        // 1. Fetch Betfair markets for matching events
-        // 2. Use detectArbs() to find opportunities
-        // 3. Process each opportunity
-        console.log(`Found ${parsedOdds.length} events for ${sportKey} (Betfair integration needed)`);
+        // In production with manual mode, you would manually trigger arbs
+        // or use a different data source that doesn't require API polling
+        console.log(`Skipping ${sportKey} - API polling disabled (manual mode)`);
       }
     } catch (error) {
       console.error(`Error scanning ${sportKey}:`, error);
@@ -121,8 +149,13 @@ async function scanSports(sportKeys: string[]): Promise<void> {
 
 /**
  * Tier 1 Scan - High volatility sports (every 2 minutes)
+ * Only runs during Sydney daytime (7am-11pm)
  */
 Deno.cron('Tier 1 Scan', '*/2 * * * *', async () => {
+  await checkDaytimeTransition();
+  if (!isSydneyDaytime()) {
+    return;
+  }
   const tier1Sports = Object.values(SPORT_KEYS).filter(
     (key) => SPORT_TIERS[key] === 'TIER_1',
   );
@@ -131,8 +164,13 @@ Deno.cron('Tier 1 Scan', '*/2 * * * *', async () => {
 
 /**
  * Tier 2 Scan - Lower volatility sports (every 10 minutes)
+ * Only runs during Sydney daytime (7am-11pm)
  */
 Deno.cron('Tier 2 Scan', '*/10 * * * *', async () => {
+  await checkDaytimeTransition();
+  if (!isSydneyDaytime()) {
+    return;
+  }
   const tier2Sports = Object.values(SPORT_KEYS).filter(
     (key) => SPORT_TIERS[key] === 'TIER_2',
   );
@@ -141,17 +179,25 @@ Deno.cron('Tier 2 Scan', '*/10 * * * *', async () => {
 
 /**
  * Tier 3 Scan - Futures/Outrights (every 6 hours)
+ * Only runs during Sydney daytime (7am-11pm)
  */
 Deno.cron('Tier 3 Scan', '0 */6 * * *', async () => {
+  await checkDaytimeTransition();
+  if (!isSydneyDaytime()) {
+    return;
+  }
   // Tier 3 sports would be added here when needed
   console.log('Tier 3 scan (Futures/Outrights) - not yet implemented');
 });
 
-// Initial scan on startup (optional)
+// Initial scan on startup (only if Sydney daytime)
 console.log('Arb-Seeker started');
-if (config.mockMode) {
+await checkDaytimeTransition();
+if (isSydneyDaytime() && config.mockMode) {
   console.log('Running in MOCK_MODE - using test data');
   const mockArb = generateMockArb();
   await processArbOpportunity(mockArb);
+} else if (!isSydneyDaytime()) {
+  console.log('Outside Sydney daytime (7am-11pm) - skipping initial scan');
 }
 
