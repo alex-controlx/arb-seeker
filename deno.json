@@ -1,7 +1,11 @@
 {
+  "name": "arb-seeker",
+  "version": "1.0.0",
+  "description": "A low-latency Sports Arbitrage Bot that detects price discrepancies between Australian Bookmakers and Betfair, built with Deno and TypeScript.",
   "tasks": {
     "start": "deno run --allow-net --allow-env --allow-read --allow-write --unstable-kv --unstable-cron --env-file=.env src/main.ts",
-    "dev": "deno run --allow-net --allow-env --allow-read --allow-write --unstable-kv --unstable-cron --env-file=.env --watch src/main.ts"
+    "dev": "deno run --allow-net --allow-env --allow-read --allow-write --unstable-kv --unstable-cron --env-file=.env --watch src/main.ts",
+    "diagnose": "deno run --allow-net --allow-env --allow-read --unstable-kv --env-file=.env diagnose.ts"
   },
   "compilerOptions": {
     "strict": true,

@@ -89,6 +89,20 @@ deno task dev
 MOCK_MODE=true deno task start
 ```
 
+### Run system diagnostics:
+```bash
+deno task diagnose
+```
+
+The diagnostic script performs a comprehensive System Integrity Test (SIT) that verifies:
+- ✅ Environment variables and configuration
+- ✅ Telegram bot connectivity
+- ✅ Odds API access and quota status
+- ✅ Betfair authentication and session generation
+- ✅ Arbitrage calculation logic
+
+All tests must pass before deployment. The script will exit with code 0 if all tests pass, or code 1 if any test fails.
+
 ## Daytime-Only Operation
 
 The bot operates only during **Sydney daytime hours (7am-11pm AEST/AEDT)** to align with manual confirmation workflow:
@@ -264,6 +278,31 @@ The following sport keys are configured for The-Odds-API:
 - **Minimal Logging:** Only I/O operations are logged (as per preferences)
 
 ## Testing
+
+### System Diagnostics
+
+Run the diagnostic script to verify all system components are working correctly:
+
+```bash
+deno task diagnose
+```
+
+**What it tests:**
+1. **Configuration Check** - Verifies all required environment variables are present and loaded
+2. **Telegram Bot Connection** - Tests connectivity and identifies the bot username
+3. **Odds API Access** - Checks API reachability and displays remaining request quota
+4. **Betfair Session Generation** - Validates authentication and session token generation
+5. **Math Engine** - Verifies arbitrage calculation logic with test scenarios
+
+**Expected Output:**
+- All tests should show `✅ PASS`
+- System status: `🚀 SYSTEM HEALTHY - READY FOR DEPLOYMENT`
+- Exit code: `0` (success)
+
+**Common Issues:**
+- **Betfair Auth Failure:** Usually indicates wrong password type (API password vs website password) or missing credentials
+- **Odds API Quota:** Check that remaining requests shows a number (not null) - indicates active API key
+- **Telegram Bot:** Verify bot token is correct and bot is active
 
 ### Mock Mode
 
