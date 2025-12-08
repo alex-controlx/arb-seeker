@@ -109,7 +109,7 @@ export interface BetfairPrice {
   size: number;
 }
 
-export interface BetfairPlaceOrderRequest {
+export interface BetfairPlaceOrderRequest extends Record<string, unknown> {
   marketId: string;
   instructions: BetfairInstruction[];
   customerRef?: string;

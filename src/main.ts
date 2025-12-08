@@ -1,11 +1,11 @@
 // Main orchestration - Tiered polling and arbitrage processing
 
-import { loadConfig, SPORT_KEYS, SPORT_TIERS, isSydneyDaytime } from './config.ts';
+import { loadConfig, SPORT_KEYS, SPORT_TIERS, isSydneyDaytime, getBetfairIdFromKey } from './config.ts';
 import { ArbEngine } from './arbEngine.ts';
 import { BetfairAuth } from './betfairAuth.ts';
 import { BetfairService } from './betfairService.ts';
 import { fetchOdds, parseOddsResponse } from './oddsService.ts';
-import { detectArbs as _detectArbs } from './arbDetector.ts';
+import { detectArb } from './arbDetector.ts';
 import { calculateGreyManStake, calculateLiability } from './utils.ts';
 import { sendTelegramAlert } from './notifications.ts';
 import { generateMockArb } from './mockData.ts';
@@ -25,7 +25,7 @@ const betfairAuth = new BetfairAuth(
   config.betfairUsername,
   config.betfairPassword,
 );
-const _betfairService = new BetfairService(betfairAuth, config.betfairAppKey);
+const betfairService = new BetfairService(betfairAuth, config.betfairAppKey);
 
 /**
  * Check for daytime transitions and log accordingly
@@ -143,16 +143,40 @@ async function scanSports(sportKeys: string[]): Promise<void> {
         // Parse odds response
         const parsedOdds = parseOddsResponse(events);
 
-        // TODO: In production, you would also fetch Betfair markets here
-        // For now, we'll use detectArbs() when Betfair integration is complete
-        // This is a placeholder - actual arb detection requires Betfair market data
-        console.log(`Found ${parsedOdds.length} events for ${sportKey} (Betfair integration needed for full detection)`);
-        
-        // When Betfair markets are fetched, use detectArbs() to find opportunities:
-        // const arbs = detectArbs(parsedOdds, betfairMarkets);
-        // for (const arb of arbs) {
-        //   await processArbOpportunity(arb);
-        // }
+        // Get the Betfair Sport ID (e.g., 'basketball_nba' -> '7522')
+        const betfairEventTypeId = getBetfairIdFromKey(sportKey);
+        if (!betfairEventTypeId) {
+          continue;
+        }
+
+        // Iterate through each game found on Bookies
+        for (const game of parsedOdds) {
+          // Skip games starting >24h away (low liquidity)
+          const startTime = new Date(game.commenceTime).getTime();
+          if (startTime - Date.now() > 86400000) {
+            continue;
+          }
+
+          // Find the matching market on Betfair
+          // Search using the Home & Away team names to find the specific "Match Odds" market
+          const betfairMarket = await betfairService.findMarket({
+            eventTypeId: betfairEventTypeId,
+            textQuery: `${game.homeTeam} ${game.awayTeam}`,
+            marketTypeCode: 'MATCH_ODDS',
+          });
+
+          if (!betfairMarket) {
+            continue;
+          }
+
+          // Check for arbitrage opportunities
+          const opportunity = detectArb(game, betfairMarket);
+
+          if (opportunity) {
+            // Found one! Process and notify
+            await processArbOpportunity(opportunity);
+          }
+        }
       }
     } catch (error) {
       console.error(`Error scanning ${sportKey}:`, error);

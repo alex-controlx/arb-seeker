@@ -107,3 +107,18 @@ export function isActiveHours(sportKey: string): boolean {
   return currentHour >= hours.start && currentHour < hours.end;
 }
 
+/**
+ * Map sport key to Betfair event type ID
+ * Returns null if sport is not mapped
+ */
+export function getBetfairIdFromKey(key: string): string | null {
+  const map: Record<string, string> = {
+    'basketball_nba': '7522',
+    'aussierules_afl': '61420',
+    'rugbyleague_nrl': '1477',
+    'cricket': '4',
+    'rugbyunion': '5',
+  };
+  return map[key] || null;
+}
+

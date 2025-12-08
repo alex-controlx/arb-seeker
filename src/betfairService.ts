@@ -92,6 +92,99 @@ export class BetfairService {
   }
 
   /**
+   * Find a market on Betfair by event type, text query, and market type
+   * Returns market with runners and prices, or null if not found
+   */
+  async findMarket(params: {
+    eventTypeId: string;
+    textQuery: string;
+    marketTypeCode: string;
+  }): Promise<{
+    marketId: string;
+    runners: Array<{
+      selectionId: number;
+      runnerName: string;
+      ex?: {
+        availableToBack: Array<{ price: number; size: number }>;
+        availableToLay: Array<{ price: number; size: number }>;
+      };
+    }>;
+  } | null> {
+    try {
+      // Step 1: Search for markets using listMarketCatalogue
+      const catalogueResult = await this.makeRequest<
+        Array<{
+          marketId: string;
+          marketName: string;
+          runners: Array<{
+            selectionId: number;
+            runnerName: string;
+          }>;
+        }>
+      >(BETFAIR_API_URL, 'listMarketCatalogue', {
+        filter: {
+          eventTypeIds: [params.eventTypeId],
+          textQuery: params.textQuery,
+          marketTypeCodes: [params.marketTypeCode],
+          marketBettingTypes: ['ODDS'],
+          turnInPlayEnabled: false, // Only pre-match
+        },
+        maxResults: 1,
+        marketProjection: ['RUNNER_METADATA', 'MARKET_START_TIME'],
+      });
+
+      if (!catalogueResult || catalogueResult.length === 0) {
+        return null;
+      }
+
+      const marketSummary = catalogueResult[0];
+
+      // Step 2: Get real-time prices using listMarketBook
+      const pricesResult = await this.makeRequest<
+        Array<{
+          marketId: string;
+          runners: Array<{
+            selectionId: number;
+            ex?: {
+              availableToBack: Array<{ price: number; size: number }>;
+              availableToLay: Array<{ price: number; size: number }>;
+            };
+          }>;
+        }>
+      >(BETFAIR_API_URL, 'listMarketBook', {
+        marketIds: [marketSummary.marketId],
+        priceProjection: {
+          priceData: ['EX_BEST_OFFERS'],
+          exBestOffersOverrides: { bestPricesDepth: 1 },
+        },
+      });
+
+      if (!pricesResult || pricesResult.length === 0) {
+        return null;
+      }
+
+      // Step 3: Merge catalogue data (names) with price data (odds)
+      const priceData = pricesResult[0];
+      return {
+        marketId: marketSummary.marketId,
+        runners: priceData.runners.map((r) => {
+          const runnerInfo = marketSummary.runners.find(
+            (meta) => meta.selectionId === r.selectionId,
+          );
+          return {
+            selectionId: r.selectionId,
+            runnerName: runnerInfo ? runnerInfo.runnerName : 'Unknown',
+            ex: r.ex,
+          };
+        }),
+      };
+    } catch (error) {
+      // Return null on error instead of throwing
+      return null;
+    }
+  }
+
+  /**
    * Place a lay bet on Betfair
    */
   async placeLayBet(

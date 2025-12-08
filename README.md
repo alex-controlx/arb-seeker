@@ -26,7 +26,8 @@ Arb-Seeker uses a **Hybrid Automation** strategy:
 - **Grey Man Strategy:** Random stake amounts that avoid round numbers (bot detection)
 - **Automated Deduplication:** Prevents processing the same arb twice (2-hour expiry)
 - **Profit Margin Validation:** Only processes arbs with ≥2% profit margin
-- **Liquidity Checking:** Ensures sufficient Betfair liquidity before processing
+- **Betfair Cross-Referencing:** Automatically searches and matches Betfair markets with bookie odds
+- **Liquidity Checking:** Ensures sufficient Betfair liquidity (≥$20) before processing
 - **Manual Mode:** Calculates arbitrage opportunities and alerts via Telegram (manual lay placement required)
 - **Telegram Alerts:** Instant notifications with deep links to bookie apps and Betfair markets
 
@@ -150,24 +151,29 @@ To avoid bot detection on bookie sites, stakes are calculated using the "Grey Ma
 
 An arbitrage opportunity must pass all of these checks:
 
-1. **Profit Margin:** ≥ 2%
-2. **Liquidity:** Betfair liquidity ≥ (stake × bookie odds)
-3. **Deduplication:** Not already processed in the last 2 hours
+1. **Market Match:** Betfair market found for the game
+2. **Profit Margin:** ≥ 2% (calculated as: `(1 / impliedProbability) - 1`)
+3. **Liquidity:** Betfair lay liquidity ≥ $20
+4. **Deduplication:** Not already processed in the last 2 hours
+5. **Time Window:** Game starts within 24 hours (for better liquidity)
 
 ### Processing Flow
 
 1. Check if within Sydney daytime (7am-11pm) - skip if outside hours
 2. Fetch odds from The-Odds-API for active sports (during daytime only)
-3. Parse and match with Betfair markets (when Betfair integration is complete)
-4. Detect arbitrage opportunities using `detectArbs()`
-5. For each valid arb:
+3. For each game found:
+   - Skip games starting >24h away (low liquidity)
+   - Search Betfair for matching market using team names
+   - Compare bookie back odds vs Betfair lay odds
+   - Detect arbitrage opportunities using `detectArb()`
+4. For each valid arb:
    - Calculate Grey Man stake
    - Validate via ArbEngine
    - Calculate Betfair liability
    - Send Telegram notification with "Manual Lay Required" status
    - Wait for manual lay placement via Betfair button
 
-**Note:** In mock mode (`MOCK_MODE=true`), the bot uses mock data instead of polling The-Odds-API.
+**Note:** In mock mode (`MOCK_MODE=true`), the bot uses mock data instead of polling The-Odds-API and Betfair.
 
 ## Betfair Integration
 
@@ -176,6 +182,21 @@ An arbitrage opportunity must pass all of these checks:
 - Uses Interactive Login (V1) - simpler than certificate-based auth
 - Session tokens stored in Deno KV with 24-hour expiry
 - Auto-refreshes on `INVALID_SESSION` errors
+
+### Market Search & Cross-Referencing
+
+The bot automatically cross-references bookie odds with Betfair markets:
+
+- **Market Matching:** Searches Betfair for matching markets using team names and event type
+- **Sport Mapping:** Maps sport keys to Betfair event type IDs:
+  - `basketball_nba` → `7522`
+  - `aussierules_afl` → `61420`
+  - `rugbyleague_nrl` → `1477`
+  - `cricket` → `4`
+  - `rugbyunion` → `5`
+- **Price Comparison:** Compares bookie back odds against Betfair lay odds in real-time
+- **Liquidity Check:** Ensures sufficient Betfair liquidity (≥$20) before processing opportunities
+- **Arbitrage Detection:** Calculates implied probability and profit margin (requires ≥2% profit)
 
 ### Lay Betting (Manual Mode)
 

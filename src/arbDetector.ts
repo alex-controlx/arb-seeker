@@ -147,3 +147,105 @@ export function buildArbOpportunity(
   };
 }
 
+/**
+ * Detect arbitrage opportunity for a single game by comparing bookie odds with Betfair lay odds
+ * Takes a parsed game object (from parseOddsResponse) and a Betfair market object
+ */
+export function detectArb(
+  game: {
+    eventId: string;
+    sport: string;
+    sportKey: string;
+    homeTeam: string;
+    awayTeam: string;
+    commenceTime: string;
+    bookmakers: Array<{
+      bookie: string;
+      bookieKey: string;
+      market: string;
+      outcome: string;
+      odds: number;
+      point?: number;
+    }>;
+  },
+  bfMarket: {
+    marketId: string;
+    runners: Array<{
+      selectionId: number;
+      runnerName: string;
+      ex?: {
+        availableToBack: Array<{ price: number; size: number }>;
+        availableToLay: Array<{ price: number; size: number }>;
+      };
+    }>;
+  },
+): ArbOpportunity | null {
+  // Find the Betfair runner for the home team
+  const homeRunner = bfMarket.runners.find((r) =>
+    r.runnerName.toLowerCase().includes(game.homeTeam.toLowerCase()) ||
+    game.homeTeam.toLowerCase().includes(r.runnerName.toLowerCase())
+  );
+
+  if (!homeRunner || !homeRunner.ex?.availableToLay || homeRunner.ex.availableToLay.length === 0) {
+    return null;
+  }
+
+  const bfLayPrice = homeRunner.ex.availableToLay[0];
+  const bfLayOdds = bfLayPrice.price;
+  const bfLiquidity = bfLayPrice.size;
+
+  // Group bookmakers by bookie to find the best home team odds for each bookie
+  const bookieMap = new Map<string, { bookie: string; bookieKey: string; odds: number }>();
+
+  for (const bm of game.bookmakers) {
+    // Only consider h2h market outcomes for the home team
+    if (bm.market === 'h2h' && bm.outcome === game.homeTeam) {
+      const existing = bookieMap.get(bm.bookie);
+      if (!existing || bm.odds > existing.odds) {
+        bookieMap.set(bm.bookie, {
+          bookie: bm.bookie,
+          bookieKey: bm.bookieKey,
+          odds: bm.odds,
+        });
+      }
+    }
+  }
+
+  // Check each bookie's back odds against Betfair lay odds
+  for (const [bookieName, bookieData] of bookieMap) {
+    const backPrice = bookieData.odds;
+
+    // Calculate implied probability: (1/backPrice) + (1/layPrice)
+    // If < 1.0, there's an arbitrage opportunity
+    const impliedProb = (1 / backPrice) + (1 / bfLayOdds);
+
+    // Require at least 2% profit margin (impliedProb < 0.98)
+    // Also check if enough liquidity exists on Betfair (at least $20)
+    if (impliedProb < 0.98 && bfLiquidity > 20) {
+      // Calculate profit margin
+      const margin = (1 / impliedProb) - 1;
+
+      // Build bookie URL (fallback if not available from API)
+      const bookieUrl = `https://www.${bookieData.bookieKey.toLowerCase()}.com.au/bet/${game.eventId}`;
+
+      return {
+        id: `${game.eventId}_${bookieData.bookieKey}_home`,
+        event: `${game.homeTeam} vs ${game.awayTeam}`,
+        sport: game.sport,
+        startTime: game.commenceTime,
+        bookie: bookieName,
+        bookieOdds: backPrice,
+        bookieUrl,
+        suggestedStake: 0, // Will be calculated by processArbOpportunity
+        betfairMarketId: bfMarket.marketId,
+        betfairSelectionId: homeRunner.selectionId,
+        layOdds: bfLayOdds,
+        layLiquidity: bfLiquidity,
+        profitMargin: margin,
+      };
+    }
+  }
+
+  return null;
+}
+
