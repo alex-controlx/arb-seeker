@@ -15,6 +15,16 @@ export interface FetchOddsOptions {
 }
 
 /**
+ * Custom error for quota exhaustion
+ */
+export class QuotaExhaustedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'QuotaExhaustedError';
+  }
+}
+
+/**
  * Fetch odds from The-Odds-API
  * Only fetches games starting in the next 24 hours
  */
@@ -36,6 +46,13 @@ export async function fetchOdds(
 
   try {
     const response = await fetch(url);
+    
+    // Check for quota exhaustion before checking response.ok
+    const requestsRemaining = response.headers.get('x-requests-remaining');
+    if (response.status === 429 || requestsRemaining === '0' || requestsRemaining === null) {
+      throw new QuotaExhaustedError('ODDS API quota exhausted');
+    }
+    
     if (!response.ok) {
       // 404 means sport key doesn't exist - log and return empty array
       if (response.status === 404) {

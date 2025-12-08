@@ -4,10 +4,10 @@ import { loadConfig, SPORT_KEYS, SPORT_TIERS, isSydneyDaytime, getBetfairIdFromK
 import { ArbEngine } from './arbEngine.ts';
 import { BetfairAuth } from './betfairAuth.ts';
 import { BetfairService } from './betfairService.ts';
-import { fetchOdds, parseOddsResponse } from './oddsService.ts';
+import { fetchOdds, parseOddsResponse, QuotaExhaustedError } from './oddsService.ts';
 import { detectArb } from './arbDetector.ts';
 import { calculateGreyManStake, calculateLiability } from './utils.ts';
-import { sendTelegramAlert } from './notifications.ts';
+import { sendTelegramAlert, sendQuotaExhaustionAlert } from './notifications.ts';
 import { generateMockArb } from './mockData.ts';
 import type { ArbOpportunity } from './types.ts';
 
@@ -26,6 +26,30 @@ const betfairAuth = new BetfairAuth(
   config.betfairPassword,
 );
 const betfairService = new BetfairService(betfairAuth, config.betfairAppKey);
+
+/**
+ * Handle quota exhaustion - send notification once per session
+ */
+async function handleQuotaExhaustion(): Promise<void> {
+  const quotaNotifiedKey = ['quota_exhaustion_notified'];
+  const quotaNotifiedEntry = await kv.get<boolean>(quotaNotifiedKey);
+  
+  // If already notified in this session, skip
+  if (quotaNotifiedEntry.value === true) {
+    return;
+  }
+  
+  // Send notification
+  const sent = await sendQuotaExhaustionAlert(
+    config.telegramBotToken,
+    config.telegramChatId,
+  );
+  
+  if (sent) {
+    // Mark as notified in KV
+    await kv.set(quotaNotifiedKey, true);
+  }
+}
 
 /**
  * Check for daytime transitions and log accordingly
@@ -179,6 +203,13 @@ async function scanSports(sportKeys: string[]): Promise<void> {
         }
       }
     } catch (error) {
+      // Handle quota exhaustion specifically
+      if (error instanceof QuotaExhaustedError) {
+        console.error(`Quota exhausted for ${sportKey}`);
+        await handleQuotaExhaustion();
+        // Continue with other sports instead of breaking
+        continue;
+      }
       console.error(`Error scanning ${sportKey}:`, error);
     }
   }
@@ -229,6 +260,8 @@ Deno.cron('Tier 3 Scan', '0 */6 * * *', async () => {
 
 // Initial scan on startup (only if Sydney daytime)
 console.log('Arb-Seeker started');
+// Reset quota notification flag on startup (allows notification after restart)
+await kv.set(['quota_exhaustion_notified'], false);
 await checkDaytimeTransition();
 if (isSydneyDaytime() && config.mockMode) {
   console.log('Running in MOCK_MODE - using test data');

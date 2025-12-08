@@ -76,3 +76,38 @@ Betfair Status: ${autoLayStatus}
     return false;
   }
 }
+
+/**
+ * Send quota exhaustion alert to Telegram
+ */
+export async function sendQuotaExhaustionAlert(
+  botToken: string,
+  chatId: string,
+): Promise<boolean> {
+  const text = 'ODDS API ACCESS ran out of requests quota';
+
+  const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+      }),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('Telegram Error:', errorText);
+      return false;
+    }
+
+    console.log('✅ Quota exhaustion alert sent');
+    return true;
+  } catch (error) {
+    console.error('Failed to send quota exhaustion alert:', error);
+    return false;
+  }
+}
