@@ -119,9 +119,9 @@ This ensures the bot is only active when you're available to manually confirm an
 Arb-Seeker polls The-Odds-API during Sydney daytime hours (7am-11pm) using tiered polling intervals:
 
 ### Tier 1 Sports (High Volatility)
-- **Sports:** NBA, AFL, NRL
+- **Sports:** NBA, AFL, NRL, Soccer EPL, Soccer UEFA Champions League
 - **Interval:** Every 2 minutes (during daytime only)
-- **Daily Requests:** ~1,440 requests/day (3 sports × 30 scans/hour × 16 hours daytime)
+- **Daily Requests:** ~2,400 requests/day (5 sports × 30 scans/hour × 16 hours daytime, adjusted for active hours filtering)
 
 ### Tier 2 Sports (Lower Volatility)
 - **Sports:** Cricket, Rugby Union
@@ -133,7 +133,7 @@ Arb-Seeker polls The-Odds-API during Sydney daytime hours (7am-11pm) using tiere
 - **Interval:** Every 6 hours (during daytime only)
 - **Daily Requests:** Minimal
 
-**Total Monthly Usage (Daytime Only):** ~49,000 requests/month (leaving ~51,000 buffer)
+**Total Monthly Usage (Daytime Only):** ~77,000 requests/month (with active hours filtering, leaving ~23,000 buffer)
 
 ### Active Hours Filtering
 
@@ -143,6 +143,8 @@ Sports are only scanned during their typical active hours (AEDT timezone):
 - **NRL:** 4 PM - 10 PM
 - **Cricket:** 10 AM - 8 PM
 - **Rugby Union:** 6 PM - 11 PM
+- **Soccer EPL:** 8 PM - 8 AM (UK timezone overlap)
+- **Soccer UEFA Champions League:** 4 AM - 10 AM (European matches)
 
 This reduces unnecessary API calls by ~30%.
 
@@ -208,6 +210,8 @@ The bot automatically cross-references bookie odds with Betfair markets:
   - `rugbyleague_nrl` → `1477`
   - `cricket` → `4`
   - `rugbyunion` → `5`
+  - `soccer_epl` → `1`
+  - `soccer_uefa_champs_league` → `1`
 - **Price Comparison:** Compares bookie back odds against Betfair lay odds in real-time
 - **Liquidity Check:** Ensures sufficient Betfair liquidity (≥$20) before processing opportunities
 - **Arbitrage Detection:** Calculates implied probability and profit margin (requires ≥2% profit)
@@ -268,6 +272,17 @@ The following sport keys are configured for The-Odds-API:
 - `rugbyleague_nrl` - NRL (note: no underscore in 'rugbyleague')
 - `cricket` - Cricket
 - `rugbyunion` - Rugby Union
+- `soccer_epl` - English Premier League
+- `soccer_uefa_champs_league` - UEFA Champions League
+
+### Tennis (Currently Disabled)
+
+Tennis is currently commented out in the configuration. The-Odds-API does not support generic keys like `tennis_atp` or `tennis_wta`. Instead, they use **tournament-specific keys** (e.g., `tennis_atp_aus_open_singles`, `tennis_atp_wimbledon`, `tennis_wta_wimbledon`).
+
+During the off-season (typically November-December), these tournament-specific keys are not available. To enable tennis arbitrage detection:
+1. Wait for active tournaments (typically late December/January for Australian Open)
+2. Add tournament-specific keys to `SPORT_KEYS` in `src/config.ts`
+3. Configure corresponding entries in `SPORT_TIERS`, `ACTIVE_HOURS`, and `getBetfairIdFromKey()`
 
 ## Error Handling
 

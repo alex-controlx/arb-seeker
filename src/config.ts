@@ -26,6 +26,10 @@ export const SPORT_KEYS = {
   NRL: 'rugbyleague_nrl', // Note: No underscore in 'rugbyleague'
   CRICKET: 'cricket',
   RUGBY_UNION: 'rugbyunion',
+  // TENNIS_ATP: 'tennis_atp', // Commented out: The-Odds-API uses tournament-specific keys (e.g., tennis_atp_aus_open_singles)
+  // TENNIS_WTA: 'tennis_wta', // Commented out: The-Odds-API uses tournament-specific keys (e.g., tennis_wta_wimbledon)
+  SOCCER_EPL: 'soccer_epl',
+  SOCCER_UEFA_CHAMPS_LEAGUE: 'soccer_uefa_champs_league',
 } as const;
 
 // Sport Tiers Mapping
@@ -35,6 +39,10 @@ export const SPORT_TIERS: Record<string, 'TIER_1' | 'TIER_2' | 'TIER_3'> = {
   [SPORT_KEYS.NRL]: 'TIER_1',
   [SPORT_KEYS.CRICKET]: 'TIER_2',
   [SPORT_KEYS.RUGBY_UNION]: 'TIER_2',
+  // [SPORT_KEYS.TENNIS_ATP]: 'TIER_1', // Commented out: See SPORT_KEYS
+  // [SPORT_KEYS.TENNIS_WTA]: 'TIER_1', // Commented out: See SPORT_KEYS
+  [SPORT_KEYS.SOCCER_EPL]: 'TIER_1',
+  [SPORT_KEYS.SOCCER_UEFA_CHAMPS_LEAGUE]: 'TIER_1',
 };
 
 // Active Hours Filter (AEDT timezone)
@@ -45,6 +53,10 @@ export const ACTIVE_HOURS: Record<string, { start: number; end: number }> = {
   [SPORT_KEYS.NRL]: { start: 16, end: 22 }, // 4 PM - 10 PM AEDT
   [SPORT_KEYS.CRICKET]: { start: 10, end: 20 }, // 10 AM - 8 PM AEDT
   [SPORT_KEYS.RUGBY_UNION]: { start: 18, end: 23 }, // 6 PM - 11 PM AEDT
+  // [SPORT_KEYS.TENNIS_ATP]: { start: 8, end: 23 }, // Commented out: See SPORT_KEYS
+  // [SPORT_KEYS.TENNIS_WTA]: { start: 8, end: 23 }, // Commented out: See SPORT_KEYS
+  [SPORT_KEYS.SOCCER_EPL]: { start: 20, end: 8 }, // 8 PM - 8 AM AEDT (UK timezone overlap)
+  [SPORT_KEYS.SOCCER_UEFA_CHAMPS_LEAGUE]: { start: 4, end: 10 }, // 4 AM - 10 AM AEDT (European matches)
 };
 
 export function loadConfig(): Config {
@@ -118,6 +130,10 @@ export function getBetfairIdFromKey(key: string): string | null {
     'rugbyleague_nrl': '1477',
     'cricket': '4',
     'rugbyunion': '5',
+    // 'tennis_atp': '2', // Commented out: See SPORT_KEYS
+    // 'tennis_wta': '2', // Commented out: See SPORT_KEYS
+    'soccer_epl': '1',
+    'soccer_uefa_champs_league': '1',
   };
   return map[key] || null;
 }
