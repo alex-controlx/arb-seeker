@@ -1,92 +1,70 @@
 // Betfair Authentication and Session Management
 
-import type { BetfairSessionResponse } from './types.ts';
-
-const BETFAIR_LOGIN_URL = 'https://identitysso.betfair.com/api/login';
-const SESSION_KEY = ['betfair', 'session'];
-const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-interface StoredSession {
-  token: string;
-  expiresAt: number;
-}
-
 export class BetfairAuth {
   private kv: Deno.Kv;
   private appKey: string;
   private username: string;
   private password: string;
 
-  constructor(
-    kv: Deno.Kv,
-    appKey: string,
-    username: string,
-    password: string,
-  ) {
+  constructor(kv: Deno.Kv, appKey: string, username: string, password: string) {
     this.kv = kv;
     this.appKey = appKey;
     this.username = username;
     this.password = password;
   }
 
-  /**
-   * Login to Betfair and get session token
-   */
-  private async login(): Promise<string> {
-    const formData = new URLSearchParams();
-    formData.append('username', this.username);
-    formData.append('password', this.password);
-
-    const response = await fetch(BETFAIR_LOGIN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'X-Application': this.appKey,
-      },
-      body: formData.toString(),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Betfair login failed: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json() as BetfairSessionResponse;
-
-    if (data.status !== 'SUCCESS' || !data.token) {
-      throw new Error(`Betfair login failed: ${data.error || 'Unknown error'}`);
-    }
-
-    return data.token;
-  }
-
-  /**
-   * Get valid session token, refreshing if necessary
-   */
   async getSessionToken(): Promise<string> {
-    // Try to get existing session
-    const stored = await this.kv.get<StoredSession>(SESSION_KEY);
-
-    if (stored.value) {
-      const now = Date.now();
-      // Refresh if expires within 1 hour
-      if (stored.value.expiresAt > now + 60 * 60 * 1000) {
-        return stored.value.token;
-      }
+    // 1. Check Cache
+    const cached = await this.kv.get<string>(["betfair_session"]);
+    if (cached.value) {
+      // console.log("Using Cached Betfair Token"); 
+      return cached.value;
     }
 
-    // Login to get new token
-    const token = await this.login();
-    const expiresAt = Date.now() + SESSION_EXPIRY_MS;
+    console.log("🔄 Requesting new Betfair Session...");
 
-    // Store session
-    await this.kv.set(SESSION_KEY, {
-      token,
-      expiresAt,
-    } as StoredSession, {
-      expireIn: SESSION_EXPIRY_MS,
+    // 2. Prepare Payload (x-www-form-urlencoded)
+    const body = new URLSearchParams();
+    body.append("username", this.username);
+    body.append("password", this.password);
+    body.append("login", "true");
+    body.append("redirectMethod", "POST");
+    body.append("product", "home.betfair.int");
+    body.append("url", "https://www.betfair.com.au/");
+
+    // 3. Send Request with "Human" Headers
+    const res = await fetch("https://identitysso.betfair.com/api/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Application": this.appKey,
+        "Accept": "application/json",
+        // CRITICAL: Spoof a real browser to bypass WAF/Cloudflare
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      },
+      body: body,
     });
 
+    // 4. Handle Response
+    const text = await res.text(); // Get raw text first to debug HTML errors
+    let data;
+
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      // If parsing fails, it's likely HTML (Access Denied / Cloudflare)
+      console.error("❌ Betfair API returned HTML/Invalid JSON. Preview:", text.substring(0, 100));
+      throw new Error(`Betfair API Error: Response was not JSON. Status: ${res.status}`);
+    }
+
+    if (data.status !== "SUCCESS") {
+      throw new Error(`Betfair Login Failed: ${data.error} (Status: ${data.status})`);
+    }
+
+    // 5. Cache Token (4 Hours)
+    const token = data.token;
+    await this.kv.set(["betfair_session"], token, { expireIn: 14400 * 1000 });
+    
     return token;
   }
 
@@ -95,10 +73,9 @@ export class BetfairAuth {
    */
   async refreshSession(): Promise<string> {
     // Clear existing session
-    await this.kv.delete(SESSION_KEY);
+    await this.kv.delete(["betfair_session"]);
 
     // Get new token
     return await this.getSessionToken();
   }
 }
-
